@@ -42,15 +42,21 @@ public class Simulation
             for (int j = 0; j < theField.getWidth(); j++)
             {
                // Get the color of the object in that cell and set the cell
-               // color
-               if (theField.isOccupied(j, i))
+               // color.
+               // We have to lock the Cell to prevent a race condition where the
+               // Cell is occupied when we first check it but is empty when we
+               // try to get the display color.
+               synchronized (theField.getCellAt(j, i))
                {
-                  graphicsContext.setColor(theField.getCellAt(j, i)
-                           .getOccupant().getDisplayColor());
-               }
-               else
-               {
-                  graphicsContext.setColor(Color.white);
+                  if (theField.getCellAt(j, i).getOccupant() != null)
+                  {
+                     graphicsContext.setColor(theField.getCellAt(j, i)
+                              .getOccupant().getDisplayColor());
+                  }
+                  else
+                  {
+                     graphicsContext.setColor(Color.white);
+                  }
                }
                graphicsContext.fillRect(j * CELL_SIZE, i * CELL_SIZE,
                         CELL_SIZE, CELL_SIZE);
@@ -103,11 +109,11 @@ public class Simulation
       /**
        * Default parameters. (You may change these if you wish.)
        */
-      int width = 50; // Default width
-      int height = 50; // Default height
+      int width = 35; // Default width
+      int height = 35; // Default height
       int starveTime = Hound.DEFAULT_STARVE_TIME; // Default starvation time
-      double probabilityFox = 0.5; // Default probability of fox
-      double probabilityHound = 0.15; // Default probability of hound
+      double probabilityFox = 0.05; // Default probability of fox
+      double probabilityHound = 0.13; // Default probability of hound
       boolean graphicsMode = true;
       Random randomGenerator = new Random();
       Field theField = null;
@@ -185,6 +191,7 @@ public class Simulation
             if (randomGenerator.nextFloat() <= probabilityFox)
             {
                theField.setCellAt(i, j, new Fox(i, j, theField));
+               theField.getCellAt(i, j).getOccupant().start();
             }
             // If a random number is less than or equal to the probability of
             // adding a hound, then place a hound. Note that if a fox
@@ -193,6 +200,7 @@ public class Simulation
             else if (randomGenerator.nextFloat() <= probabilityHound)
             {
                theField.setCellAt(i, j, new Hound(i, j, theField));
+               theField.getCellAt(i, j).getOccupant().start();
             }
          } // for
       } // for
@@ -222,12 +230,12 @@ public class Simulation
       // guarantee either of those will ever arise...
       while (true)
       {
-         // if (DISPLAY_FIELD.getAndSet(false))
-         // {
+         if (DISPLAY_FIELD.getAndSet(false))
+         {
+            drawField(graphicsContext, theField); // Draw the current state
+         }
          // drawField(graphicsContext, theField); // Draw the current state
-         // }
-         drawField(graphicsContext, theField); // Draw the current state
-         Thread.sleep(1000);
+         // Thread.sleep(1000);
       }
 
    } // main

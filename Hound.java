@@ -1,7 +1,6 @@
 import java.awt.Color;
 import java.util.Random;
 import java.util.Vector;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.PriorityBlockingQueue;
 
 
@@ -19,7 +18,7 @@ public class Hound extends FieldOccupant
 
       // Start out well-fed
       eats();
-      start();
+      // start();
    }
 
 
@@ -104,21 +103,21 @@ public class Hound extends FieldOccupant
    @Override
    public void run()
    {
+      Random r = new Random();
+      PriorityBlockingQueue<Cell<FieldOccupant>> toLock = new PriorityBlockingQueue<>();
+      Field theField = getTheField();
+      Vector<Fox> foxes = new Vector<>();
+      Vector<Hound> hounds = new Vector<>();
+      Fox toEat = null;
+      Hound toMate = null;
+      Cell<FieldOccupant> first, second, third;
+      int sleepTime;
+
       while (!hasStarved())
       {
          if (Field.START.get())
          {
-            Random r = new Random();
-            Field theField = getTheField();
-            ConcurrentLinkedDeque<Cell<FieldOccupant>> neighbors;
-            Vector<Fox> foxes = new Vector<>();
-            Vector<Hound> hounds = new Vector<>();
-            Fox toEat = null;
-            Hound toMate = null;
-            FieldOccupant first, second, third;
-            PriorityBlockingQueue<FieldOccupant> toLock = new PriorityBlockingQueue<>();
-            int sleepTime = r.nextInt(DEFAULT_SLEEP)
-                     + DEFAULT_SLEEP_VARIABLE;
+            sleepTime = r.nextInt(DEFAULT_SLEEP) + DEFAULT_SLEEP_VARIABLE;
 
             // Wait for the specified number of seconds...
             try
@@ -138,13 +137,11 @@ public class Hound extends FieldOccupant
                // ignore, keep on going.
             }
 
-            // Get neighbors.
-            neighbors = theField.getNeighborsOf(getRow(), getCol());
-
             // Now do Hound things...
             // Iterate over the neighbors and see how many foxes and
             // hounds are nearby
-            for (Cell<FieldOccupant> neighbor : neighbors)
+            for (Cell<FieldOccupant> neighbor : theField
+                     .getNeighborsOf(getRow(), getCol()))
             {
                if (neighbor.getOccupant() instanceof Fox)
                {
@@ -164,23 +161,25 @@ public class Hound extends FieldOccupant
                toEat = foxes.get(r.nextInt(foxes.size()));
                toMate = hounds.get(r.nextInt(hounds.size()));
 
-               toLock.add(toEat);
-               toLock.add(toMate);
-               toLock.add(this);
+               // toLock.add(theField.getCellAt(getRow(), getCol()));
+               toLock.add(
+                        theField.getCellAt(toEat.getRow(), toEat.getCol()));
+               toLock.add(theField.getCellAt(toMate.getRow(),
+                        toMate.getCol()));
 
-               first = toLock.poll();
+               // first = toLock.poll();
                second = toLock.poll();
                third = toLock.poll();
 
-               // Lock the first FieldOccupant.
-               synchronized (first)
+               // Lock the first Cell, always our Cell to avoid race conditions.
+               synchronized (this)
                {
                   if (Simulation.DEBUG)
                   {
                      Simulation.LOCKED_CELLS.put(theField.getCellAt(
                               first.getRow(), first.getCol()), true);
                   }
-                  // Lock the second FieldOccupant.
+                  // Lock the second Cell.
                   synchronized (second)
                   {
                      if (Simulation.DEBUG)
@@ -189,7 +188,7 @@ public class Hound extends FieldOccupant
                                  second.getRow(), second.getCol()), true);
                      }
 
-                     // Lock the third FieldOccupant.
+                     // Lock the third Cell.
                      synchronized (third)
                      {
                         if (Simulation.DEBUG)
@@ -208,9 +207,8 @@ public class Hound extends FieldOccupant
                         {
                            // Eat the Fox.
                            eats();
-
-                           // Tell the Fox it has been eaten.
-                           toEat.notify(); // EXCEPTION?
+                           theField.setCellAt(toEat.getRow(),
+                                    toEat.getCol(), null);
 
                            // If the Neighboring Hound still exists, then
                            // birth a new Hound where the Fox was.
@@ -221,11 +219,15 @@ public class Hound extends FieldOccupant
                                                       toMate.getCol())
                                              .getOccupant() instanceof Hound)
                            {
+                              // Spawn a new Hound.
                               theField.getCellAt(toEat.getRow(),
                                        toEat.getCol()).setOccupant(
                                                 new Hound(toEat.getRow(),
                                                          toEat.getCol(),
                                                          theField));
+                              theField.getCellAt(toEat.getRow(),
+                                       toEat.getCol()).getOccupant()
+                                       .start();
                            }
                         } // Eat Fox
                           // We missed the Fox, so get hungrier.
@@ -260,8 +262,9 @@ public class Hound extends FieldOccupant
                // Get a random Fox to eat.
                toEat = foxes.get(r.nextInt(foxes.size()));
 
-               toLock.add(toEat);
-               toLock.add(this);
+               toLock.add(theField.getCellAt(getRow(), getCol()));
+               toLock.add(
+                        theField.getCellAt(toEat.getRow(), toEat.getCol()));
 
                first = toLock.poll();
                second = toLock.poll();
@@ -291,15 +294,14 @@ public class Hound extends FieldOccupant
                                                 toEat.getCol())
                                        .getOccupant() instanceof Fox)
                      {
-                        // Eat the Fox.
-                        eats();
-
                         // Tell the Fox it has been eaten.
                         theField.setCellAt(toEat.getRow(), toEat.getCol(),
                                  null);
-                        toEat.notify();
+
+                        // Feed ourself from Fox.
+                        eats();
                      }
-                     // We missed the Fox, so get hungrier.
+                     // Else we missed the Fox, so get hungrier.
                      else
                      {
                         // getHungrier(sleepTime);
@@ -319,12 +321,11 @@ public class Hound extends FieldOccupant
                            first.getRow(), first.getCol()), false);
                }
             }
-            // If none of its neighbors is a Fox, it gets hungrier.
-            else
-            {
-               // getHungrier(sleepTime);
-            }
-         }
+            // Else If none of its neighbors is a Fox, it gets hungrier.
+
+            foxes.clear();
+            hounds.clear();
+         } // If START
       } // while(!hasStarved)
 
       // Before exiting, remove ourselves from the Field.

@@ -1,5 +1,5 @@
+import java.util.ArrayList;
 import java.util.Vector;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -22,13 +22,13 @@ public class Field
       // Setup number of rows.
       p_occupants = new Vector<>(width);
 
-      for (int i = 0; i < p_occupants.capacity(); i++)
+      for (int i = 0; i < width; i++)
       {
          // Create the columns for the Field.
          p_occupants.add(new Vector<Cell<FieldOccupant>>(height));
 
          // Set each location to null.
-         for (int j = 0; j < p_occupants.get(0).capacity(); j++)
+         for (int j = 0; j < height; j++)
          {
             p_occupants.get(i).add(new Cell<FieldOccupant>(i, j, null));
          }
@@ -104,15 +104,14 @@ public class Field
     * @return a collection of the occupants of cells adjacent to the given cell;
     *         collection does not include null objects
     */
-   public ConcurrentLinkedDeque<Cell<FieldOccupant>> getNeighborsOf(int x,
-            int y)
+   public ArrayList<Cell<FieldOccupant>> getNeighborsOf(int x, int y)
    {
       // For any cell there are 8 neighbors - left, right, above, below,
       // and the four diagonals. Define a collection of offset pairs that
       // we'll step through to access each of the 8 neighbors
       final int[][] indexOffsets = { { 0, 1 }, { 1, 0 }, { 0, -1 },
             { -1, 0 }, { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
-      ConcurrentLinkedDeque<Cell<FieldOccupant>> neighbors = new ConcurrentLinkedDeque<>();
+      ArrayList<Cell<FieldOccupant>> neighbors = new ArrayList<>();
 
       // Iterate over the set of offsets, adding them to the x and y
       // indexes to check the neighboring cells
@@ -120,10 +119,7 @@ public class Field
       {
          // If there's something at that location, add it to our
          // neighbor set
-         if (isOccupied(x + offset[0], y + offset[1]))
-         {
-            neighbors.add(getCellAt(x + offset[0], y + offset[1]));
-         }
+         neighbors.add(getCellAt(x + offset[0], y + offset[1]));
       }
 
       return neighbors;

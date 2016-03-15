@@ -2,7 +2,7 @@
 /**
  * General helper class to control synchronized operations on a Field.
  */
-public class Cell<T>
+public class Cell<T> implements Comparable<Cell<T>>
 {
    /**
     * Creates a new Cell.
@@ -12,7 +12,7 @@ public class Cell<T>
     * @param col
     *           The row of the Cell on a Field.
     */
-   Cell(int row, int col, T occupant)
+   public Cell(int row, int col, T occupant)
    {
       setRow(row);
       setCol(col);
@@ -26,7 +26,7 @@ public class Cell<T>
     * @param col
     *           The col to set for the Cell.
     */
-   void setCol(int col)
+   public void setCol(int col)
    {
       p_col = col;
    }
@@ -37,7 +37,7 @@ public class Cell<T>
     * 
     * @return The col of the Cell.
     */
-   int getCol()
+   public int getCol()
    {
       return p_col;
    }
@@ -48,7 +48,7 @@ public class Cell<T>
     * 
     * @return The row of the Cell.
     */
-   int getRow()
+   public int getRow()
    {
       return p_row;
    }
@@ -60,7 +60,7 @@ public class Cell<T>
     * @param row
     *           The row to set for the Cell.
     */
-   void setRow(int row)
+   public void setRow(int row)
    {
       p_row = row;
    }
@@ -78,16 +78,6 @@ public class Cell<T>
 
 
    /**
-    * Display a Cell.
-    */
-   @Override
-   public String toString()
-   {
-      return getOccupant() == null ? " " : getOccupant().toString();
-   }
-
-
-   /**
     * Sets the FieldOccupant of this Cell.
     * 
     * @param occupant
@@ -97,6 +87,24 @@ public class Cell<T>
    {
       p_occupant = occupant;
       Simulation.DISPLAY_FIELD.getAndSet(true);
+   }
+
+
+   /**
+    * Display a Cell.
+    */
+   @Override
+   public String toString()
+   {
+      return getOccupant() == null ? " " : getOccupant().toString();
+   }
+
+
+   @Override
+   public int compareTo(Cell<T> o)
+   {
+      return getRow() - o.getRow() == 0 ? getCol() - o.getCol()
+               : Integer.MAX_VALUE;
    }
 
    private int p_row;
