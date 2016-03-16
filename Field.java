@@ -4,20 +4,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 
 /**
- * The Field class defines an object that models a field full of foxes and
- * hounds. Descriptions of the methods you must implement appear below.
+ * The Field class defines an object that models a Field that can contain
+ * things.
  */
 public class Field
 {
    /**
-    * Creates an empty field of given width and height
+    * Creates an empty field of given width and height.
     *
     * @param width
     *           of the field.
     * @param height
     *           of the field.
+    * @param fieldUpdated
+    *           the flag to set if we should redraw the Field.
     */
-   public Field(int width, int height)
+   public Field(int width, int height, AtomicBoolean fieldUpdated)
    {
       // Setup number of rows.
       p_occupants = new Vector<>(width);
@@ -33,10 +35,29 @@ public class Field
             p_occupants.get(i).add(new Cell<FieldOccupant>(i, j, null));
          }
       }
+
+      p_fieldUpdated = fieldUpdated;
    } // Field
 
 
    /**
+    * Creates an empty field of given width and height.
+    *
+    * @param width
+    *           of the field.
+    * @param height
+    *           of the field.
+    */
+   public Field(int width, int height)
+   {
+      // Call our general constructor, ignoring the drawField parameter.
+      this(width, height, new AtomicBoolean(false));
+   } // Field
+
+
+   /**
+    * Returns the width of the field.
+    * 
     * @return the width of the field.
     */
    public int getWidth()
@@ -46,6 +67,8 @@ public class Field
 
 
    /**
+    * Returns the height of the field.
+    * 
     * @return the height of the field.
     */
    public int getHeight()
@@ -55,31 +78,43 @@ public class Field
 
 
    /**
-    * Place an occupant in cell (x, y).
+    * Place a FieldOccupant in Cell (x, y) and return a reference to the
+    * FieldOccupant.
     *
     * @param x
-    *           is the x-coordinate of the cell to place a mammal in.
+    *           is the x-coordinate of the Cell to place a FieldOccupant in.
     * @param y
-    *           is the y-coordinate of the cell to place a mammal in.
+    *           is the y-coordinate of the Cell to place a FieldOccupant in.
     * @param toAdd
-    *           is the occupant to place.
+    *           is the FieldOccupant to place.
+    * 
+    * @return the FieldOccupant we just set, or null if it was null.
     */
-   public void setCellAt(int x, int y, FieldOccupant toAdd)
+   public synchronized FieldOccupant setCellAt(int x, int y,
+            FieldOccupant toAdd)
    {
+      // First get the Cell, then updated the Occupant of the Cell.
       getCellAt(normalizeIndex(x, WIDTH_INDEX),
                normalizeIndex(y, !WIDTH_INDEX)).setOccupant(toAdd);
+
+      // We updated the Field, so make sure our state indicates so.
+      getAndSetFieldUpdated(true);
+
+      return toAdd;
    } // setCellAt
 
 
    /**
+    * Returns the Cell at the coordinates provided.
+    * 
     * @param x
-    *           is the x-coordinate of the cell whose contents are queried.
+    *           is the x-coordinate of the Cell whose contents are queried.
     * @param y
-    *           is the y-coordinate of the cell whose contents are queried.
+    *           is the y-coordinate of the Cell whose contents are queried.
     *
-    * @return occupant of the cell (or null if unoccupied)
+    * @return the Cell at the coordinates provided.
     */
-   public Cell<FieldOccupant> getCellAt(int x, int y)
+   public synchronized Cell<FieldOccupant> getCellAt(int x, int y)
    {
       return p_occupants.get(normalizeIndex(x, WIDTH_INDEX))
                .get(normalizeIndex(y, !WIDTH_INDEX));
@@ -87,12 +122,14 @@ public class Field
 
 
    /**
+    * Returns true if this Cell is occupied.
+    * 
     * @param x
-    *           is the x-coordinate of the cell whose contents are queried.
+    *           is the x-coordinate of the Cell whose contents are queried.
     * @param y
-    *           is the y-coordinate of the cell whose contents are queried.
+    *           is the y-coordinate of the Cell whose contents are queried.
     *
-    * @return true if the cell is occupied
+    * @return true if the Cell is occupied
     */
    public boolean isOccupied(int x, int y)
    {
@@ -101,12 +138,13 @@ public class Field
 
 
    /**
-    * @return a collection of the occupants of cells adjacent to the given cell;
-    *         collection does not include null objects
+    * Returns a collection of the occupants of Cells adjacent to the given Cell.
+    * 
+    * @return a collection of the occupants of Cells adjacent to the given Cell.
     */
    public ArrayList<Cell<FieldOccupant>> getNeighborsOf(int x, int y)
    {
-      // For any cell there are 8 neighbors - left, right, above, below,
+      // For any Cell there are 8 neighbors - left, right, above, below,
       // and the four diagonals. Define a collection of offset pairs that
       // we'll step through to access each of the 8 neighbors
       final int[][] indexOffsets = { { 0, 1 }, { 1, 0 }, { 0, -1 },
@@ -114,7 +152,7 @@ public class Field
       ArrayList<Cell<FieldOccupant>> neighbors = new ArrayList<>();
 
       // Iterate over the set of offsets, adding them to the x and y
-      // indexes to check the neighboring cells
+      // indexes to check the neighboring Cells
       for (int[] offset : indexOffsets)
       {
          // If there's something at that location, add it to our
@@ -128,11 +166,23 @@ public class Field
 
 
    /**
+    * Sets the state object for this Field.
+    * 
+    * @param fieldUpdated
+    *           true if we should draw the Field, false otherwise.
+    */
+   public boolean getAndSetFieldUpdated(boolean fieldUpdated)
+   {
+      return p_fieldUpdated.getAndSet(fieldUpdated);
+   } // setFieldUpdated
+
+
+   /**
     * Normalize an index (positive or negative) by translating it to a legal
-    * reference within the bounds of the field
+    * reference within the bounds of the field.
     *
     * @param index
-    *           to normalize
+    *           the index to normalize.
     * @param isWidth
     *           is true when normalizing a width reference, false if a height
     *           reference
@@ -150,15 +200,15 @@ public class Field
       {
          return index % bounds;
       }
-      // For negative values we convert to positive, mod the bounds and
+      // For negative values we convert to positive, modulus the bounds and
       // then subtract from the width (i.e., we count from bounds down to
       // 0. If we get say, -12 on a field 10 wide, we convert -12 to
-      // 12, mod with 10 to get 2 and then subract that from 10 to get 8)
+      // 12, modulus with 10 to get 2 and then subtract that from 10 to get 8)
       else
       {
          return bounds - (-index % bounds);
       }
-   }
+   } // normalizeIndex
 
    /**
     * Define any variables associated with a Field object here. These variables
@@ -168,8 +218,8 @@ public class Field
 
    // Used in index normalizing method to distinguish between x and y
    // indices
-   private final static boolean WIDTH_INDEX = true;
+   private static final boolean WIDTH_INDEX = true;
 
-   public static final AtomicBoolean START = new AtomicBoolean(false);
+   private AtomicBoolean p_fieldUpdated;
 
 }

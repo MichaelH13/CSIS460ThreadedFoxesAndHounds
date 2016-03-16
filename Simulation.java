@@ -1,6 +1,6 @@
 import java.awt.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 
@@ -8,97 +8,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The Simulation class is a program that runs and animates a simulation of
  * Foxes and Hounds.
  */
-
 public class Simulation
 {
 
-   // The constant CELL_SIZE determines the size of each cell on the
+   // The constant CELL_SIZE determines the size of each Cell on the
    // screen during animation. (You may change this if you wish.)
-   private static final int                                            CELL_SIZE     = 15;
-   private static final String                                         USAGE_MESSAGE = "Usage: java Simulation [--graphics] [--width int] [--height int] [--starvetime int] [--fox float] [--hound float]";
-   public static final boolean                                         DEBUG         = false;
-   public static final AtomicBoolean                                   DISPLAY_FIELD = new AtomicBoolean(
+   private static final int          CELL_SIZE     = 15;
+   private static final String       USAGE_MESSAGE = "Usage: java Simulation [--graphics] [--width int] [--height int] [--starvetime int] [--fox float] [--hound float]";
+   public static final AtomicBoolean DISPLAY_FIELD = new AtomicBoolean(
             false);
-   public static final ConcurrentHashMap<Cell<FieldOccupant>, Boolean> LOCKED_CELLS  = new ConcurrentHashMap<>();
-
-
-   /**
-    * Draws the current state of the field
-    *
-    * @param graphicsContext
-    *           is an optional GUI window to draw to
-    * @param theField
-    *           is the object to display
-    */
-   private static void drawField(Graphics graphicsContext, Field theField)
-   {
-      // If we have a graphics context then update the GUI, otherwise
-      // output text-based display
-      if (graphicsContext != null)
-      {
-         // Iterate over the cells and draw the thing in that cell
-         for (int i = 0; i < theField.getHeight(); i++)
-         {
-            for (int j = 0; j < theField.getWidth(); j++)
-            {
-               // Get the color of the object in that cell and set the cell
-               // color.
-               // We have to lock the Cell to prevent a race condition where the
-               // Cell is occupied when we first check it but is empty when we
-               // try to get the display color.
-               synchronized (theField.getCellAt(j, i))
-               {
-                  if (theField.getCellAt(j, i).getOccupant() != null)
-                  {
-                     graphicsContext.setColor(theField.getCellAt(j, i)
-                              .getOccupant().getDisplayColor());
-                  }
-                  else
-                  {
-                     graphicsContext.setColor(Color.white);
-                  }
-               }
-               graphicsContext.fillRect(j * CELL_SIZE, i * CELL_SIZE,
-                        CELL_SIZE, CELL_SIZE);
-            } // for
-         } // for
-      }
-      else // No graphics, just text
-      {
-         // Draw a line above the field
-         for (int i = 0; i < theField.getWidth() * 2 + 1; i++)
-         {
-            System.out.print("-");
-         }
-         System.out.println();
-         // For each cell, display the thing in that cell
-         for (int i = 0; i < theField.getHeight(); i++)
-         {
-            System.out.print("|"); // separate cells with '|'
-            for (int j = 0; j < theField.getWidth(); j++)
-            {
-               if (theField.isOccupied(j, i))
-               {
-                  System.out.print(
-                           theField.getCellAt(j, i).toString() + "|");
-               }
-               else
-               {
-                  System.out.print(" |");
-               }
-            }
-            System.out.println();
-         } // for
-
-         // Draw a line below the field
-         for (int i = 0; i < theField.getWidth() * 2 + 1; i++)
-         {
-            System.out.print("-");
-         }
-         System.out.println();
-
-      } // else
-   } // drawField
 
 
    /**
@@ -112,11 +30,16 @@ public class Simulation
       int width = 35; // Default width
       int height = 35; // Default height
       int starveTime = Hound.DEFAULT_STARVE_TIME; // Default starvation time
-      double probabilityFox = 0.05; // Default probability of fox
-      double probabilityHound = 0.13; // Default probability of hound
+      double probabilityFox = 0.15; // Default probability of fox
+      double probabilityHound = 0.05; // Default probability of hound
       boolean graphicsMode = true;
       Random randomGenerator = new Random();
       Field theField = null;
+      Phaser startPhaser = new Phaser();
+
+      // Set this thread to be the gate keeper for the race. No threads may run
+      // until we say so.
+      startPhaser.register();
 
       // If we attach a GUI to this program, these objects will hold
       // references to the GUI elements
@@ -181,7 +104,7 @@ public class Simulation
       // Set the starve time for hounds
       Hound.setStarveTime(starveTime);
 
-      // Visit each cell; randomly placing a Fox, Hound, or nothing in each.
+      // Visit each Cell; randomly placing a Fox, Hound, or nothing in each.
       for (int i = 0; i < theField.getWidth(); i++)
       {
          for (int j = 0; j < theField.getHeight(); j++)
@@ -190,8 +113,9 @@ public class Simulation
             // of adding a fox, then place a fox
             if (randomGenerator.nextFloat() <= probabilityFox)
             {
-               theField.setCellAt(i, j, new Fox(i, j, theField));
-               theField.getCellAt(i, j).getOccupant().start();
+               // Set the Cell to hold the Fox and start the thread.
+               theField.setCellAt(i, j,
+                        new Fox(i, j, theField, startPhaser)).start();
             }
             // If a random number is less than or equal to the probability of
             // adding a hound, then place a hound. Note that if a fox
@@ -199,13 +123,17 @@ public class Simulation
             // ignored.
             else if (randomGenerator.nextFloat() <= probabilityHound)
             {
-               theField.setCellAt(i, j, new Hound(i, j, theField));
-               theField.getCellAt(i, j).getOccupant().start();
+               // Set the Cell to hold the Hound, and start the thread.
+               theField.setCellAt(i, j,
+                        new Hound(i, j, theField, startPhaser)).start();
             }
          } // for
       } // for
 
-      Field.START.set(true);
+      // We are ready to start, so arrive and de-register (I think this should
+      // be "unregister"...but it's not my choice) to let the waiting
+      // threads know to start.
+      startPhaser.arriveAndDeregister();
 
       // If we're in graphics mode, then create the frame, canvas,
       // and window. If not in graphics mode, these will remain null
@@ -225,18 +153,85 @@ public class Simulation
          graphicsContext = drawingCanvas.getGraphics();
       } // if
 
-      // Loop infinitely, performing timesteps. We could optionally stop
-      // when the Field becomes empty or full, though there is no
-      // guarantee either of those will ever arise...
+      // Loop infinitely. We could optionally stop
+      // when the Field becomes empty that will ever arise...
       while (true)
       {
-         if (DISPLAY_FIELD.getAndSet(false))
+         // Draw the current state if the Field has been updated.
+         if (theField.getAndSetFieldUpdated(false))
          {
-            drawField(graphicsContext, theField); // Draw the current state
+            drawField(graphicsContext, theField);
          }
-         // drawField(graphicsContext, theField); // Draw the current state
-         // Thread.sleep(1000);
       }
-
    } // main
+
+
+   /**
+    * Draws the current state of the field.
+    *
+    * @param graphicsContext
+    *           is an optional GUI window to draw to.
+    * @param theField
+    *           is the object to display.
+    */
+   private static void drawField(Graphics graphicsContext, Field theField)
+   {
+      FieldOccupant occupantToDisplay = null;
+
+      // If we have a graphics context then update the GUI, otherwise
+      // output text-based display
+      if (graphicsContext != null)
+      {
+         // Iterate over the Cells and draw the thing in that Cell
+         for (int i = 0; i < theField.getHeight(); i++)
+         {
+            for (int j = 0; j < theField.getWidth(); j++)
+            {
+               // Get a handle on the current occupant, if null, display white,
+               // otherwise display the Color of that FieldOccupant.
+               occupantToDisplay = theField.getCellAt(j, i).getOccupant();
+               graphicsContext
+                        .setColor(occupantToDisplay == null ? Color.WHITE
+                                 : occupantToDisplay.getDisplayColor());
+               graphicsContext.fillRect(j * CELL_SIZE, i * CELL_SIZE,
+                        CELL_SIZE, CELL_SIZE);
+            } // for
+         } // for
+      }
+      else // No graphics, just text
+      {
+         // Draw a line above the field
+         for (int i = 0; i < theField.getWidth() * 2 + 1; i++)
+         {
+            System.out.print("-");
+         }
+         System.out.println();
+         // For each Cell, display the thing in that Cell
+         for (int i = 0; i < theField.getHeight(); i++)
+         {
+            System.out.print("|"); // separate Cells with '|'
+            for (int j = 0; j < theField.getWidth(); j++)
+            {
+               if (theField.isOccupied(j, i))
+               {
+                  System.out.print(
+                           theField.getCellAt(j, i).toString() + "|");
+               }
+               else
+               {
+                  System.out.print(" |");
+               }
+            }
+            System.out.println();
+         } // for
+
+         // Draw a line below the field
+         for (int i = 0; i < theField.getWidth() * 2 + 1; i++)
+         {
+            System.out.print("-");
+         }
+         System.out.println();
+
+      } // else
+   } // drawField
 }
