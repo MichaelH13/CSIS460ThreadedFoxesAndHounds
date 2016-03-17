@@ -71,8 +71,7 @@ public class Fox extends FieldOccupant
          getStartPhaser().awaitAdvance(getStartPhaser().getPhase());
 
          // Foxes never die, so keep going until we get eaten.
-         while (theField.getCellAt(getRow(), getCol())
-                  .getOccupant() == this)
+         while (!isInterrupted())
          {
             // Sleep for a fixed time plus a random time.
             Thread.sleep(r.nextInt(DEFAULT_SLEEP_VARIABLE) + DEFAULT_SLEEP);
@@ -156,8 +155,7 @@ public class Fox extends FieldOccupant
                            // Then make sure our mate is still alive...
                            // Finally make sure we are going to birth
                            // to an empty Cell still.
-                           if (theField.getCellAt(getRow(), getCol())
-                                    .getOccupant() == this
+                           if (!isInterrupted()
                                     && theField
                                              .getCellAt(toMate.getRow(),
                                                       toMate.getCol())
@@ -180,17 +178,7 @@ public class Fox extends FieldOccupant
       }
       catch (InterruptedException e)
       {
-         // Make sure we don't exist on the field any more if we are
-         // interrupted.
-         synchronized (getTheField().getCellAt(getRow(), getCol()))
-         {
-            // If we are still on the Field, remove ourself.
-            if (this == getTheField().getCellAt(getRow(), getCol())
-                     .getOccupant())
-            {
-               getTheField().setCellAt(getRow(), getCol(), null);
-            }
-         }
+         // We died.
       }
    }
 }

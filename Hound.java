@@ -155,8 +155,7 @@ public class Hound extends FieldOccupant
          }
 
          // Now do Hound things...
-         // Iterate over the neighbors and see how many foxes and
-         // hounds are nearby
+         // Iterate over the neighbors and see how many Foxes are nearby.
          for (Cell<FieldOccupant> neighbor : theField
                   .getNeighborsOf(getRow(), getCol()))
          {
@@ -164,43 +163,125 @@ public class Hound extends FieldOccupant
             {
                foxes.addElement((Fox) neighbor.getOccupant());
             }
-            else if (neighbor.getOccupant() instanceof Hound)
-            {
-               hounds.addElement((Hound) neighbor.getOccupant());
-            }
          } // for
 
          // Attempt to eat the Fox and then reproduce.
-         if (foxes.size() > 0 && hounds.size() > 0)
+         if (foxes.size() > 0)
          {
-            // Get a random Fox to eat, then get a random Hound to mate
-            // with.
+            // Get a random Fox to eat.
             toEat = foxes.get(r.nextInt(foxes.size()));
-            toMate = hounds.get(r.nextInt(hounds.size()));
 
-            // Add both of the Cells we intend to use if we get the chance to
-            // our priority queue so we can lock Cells in the correct order as
-            // to avoid deadlock.
-            toLock.add(theField.getCellAt(toEat.getRow(), toEat.getCol()));
-            toLock.add(
-                     theField.getCellAt(toMate.getRow(), toMate.getCol()));
-
-            // For clarity of reading, we'll lock the second and third Cells
-            // (after locking ourself first).
-            second = toLock.poll();
-            third = toLock.poll();
-
-            // Lock the first Cell, always our Cell to avoid race conditions.
-            synchronized (this)
+            // Iterate over the neighbors and see how many Foxes and
+            // Hounds are nearby
+            for (Cell<FieldOccupant> neighbor : theField
+                     .getNeighborsOf(toEat.getRow(), toEat.getCol()))
             {
-               // Lock the second Cell.
-               synchronized (second)
+               // Get all other Hounds around this Fox that are not ourself.
+               if (neighbor.getOccupant() instanceof Hound
+                        && this != neighbor.getOccupant())
                {
-                  // Lock the third Cell.
-                  synchronized (third)
+                  hounds.addElement((Hound) neighbor.getOccupant());
+               }
+            } // for
+
+            // If the Fox we want to eat has neighboring Hounds, try to
+            // reproduce with that Hound into the Fox's Cell.
+            if (hounds.size() > 0)
+            {
+               // Then get a random Hound to mate with.
+               toMate = hounds.get(r.nextInt(hounds.size()));
+
+               // Add both of the Cells we intend to use if we get the chance to
+               // our priority queue so we can lock Cells in the correct order
+               // as to avoid deadlock.
+               toLock.add(
+                        theField.getCellAt(toEat.getRow(), toEat.getCol()));
+               toLock.add(theField.getCellAt(toMate.getRow(),
+                        toMate.getCol()));
+
+               // For clarity of reading, we'll lock the second and third Cells
+               // (after locking ourself first).
+               second = toLock.poll();
+               third = toLock.poll();
+
+               // Lock the first Cell, always our Cell to avoid race conditions.
+               synchronized (this)
+               {
+                  // Lock the second Cell.
+                  synchronized (second)
                   {
-                     // If the location is still occupied, and the
-                     // occupant is a Fox, we'll eat that Fox.
+                     // Lock the third Cell.
+                     synchronized (third)
+                     {
+                        // If the location is still occupied, and the
+                        // occupant is a Fox, we'll eat that Fox.
+                        if (theField.isOccupied(toEat.getRow(),
+                                 toEat.getCol())
+                                 && theField
+                                          .getCellAt(toEat.getRow(),
+                                                   toEat.getCol())
+                                          .getOccupant() instanceof Fox)
+                        {
+                           // Set the Fox's Cell to be null so it will exit
+                           // before trying to do anything.
+                           theField.getCellAt(toEat.getRow(),
+                                    toEat.getCol()).getOccupant()
+                                    .interrupt();
+                           theField.setCellAt(toEat.getRow(),
+                                    toEat.getCol(), null);
+
+                           // Feed ourself from the Fox we just ate.
+                           eats();
+
+                           // If the Neighboring Hound still exists, then
+                           // birth a new Hound where the Fox was.
+                           // Else we missed the Fox, so we just get hungrier.
+                           if (theField.isOccupied(toMate.getRow(),
+                                    toMate.getCol())
+                                    && theField
+                                             .getCellAt(toMate.getRow(),
+                                                      toMate.getCol())
+                                             .getOccupant() instanceof Hound)
+                           {
+                              // Set the Cell that we are going to eat with a
+                              // new Hound and start the thread.
+                              theField.setCellAt(toEat.getRow(),
+                                       toEat.getCol(),
+                                       new Hound(toEat.getRow(),
+                                                toEat.getCol(), theField,
+                                                getStartPhaser()))
+                                       .start();
+                           }
+                        } // Eat Fox
+                     } // Release lock on third Cell
+                  } // Release lock on second Cell
+               } // Release lock on first Cell
+            } // If we can reproduce
+
+            // Else, we will just try to go eat a Fox.
+            else
+            {
+               // Get a random Fox to eat.
+               toEat = foxes.get(r.nextInt(foxes.size()));
+
+               // Prioritize our Cells.
+               toLock.add(theField.getCellAt(getRow(), getCol()));
+               toLock.add(
+                        theField.getCellAt(toEat.getRow(), toEat.getCol()));
+
+               // Get the next two Cells to lock.
+               first = toLock.poll();
+               second = toLock.poll();
+
+               // Lock the first Cell.
+               synchronized (first)
+               {
+                  // Lock the second Cell.
+                  synchronized (second)
+                  {
+                     // If the location is still occupied, and the occupant
+                     // is a Fox, we'll eat that Fox.
+                     // Else we missed the Fox, so get hungrier.
                      if (theField.isOccupied(toEat.getRow(), toEat.getCol())
                               && theField
                                        .getCellAt(toEat.getRow(),
@@ -209,78 +290,19 @@ public class Hound extends FieldOccupant
                      {
                         // Set the Fox's Cell to be null so it will exit before
                         // trying to do anything.
+                        theField.getCellAt(toEat.getRow(), toEat.getCol())
+                                 .getOccupant().interrupt();
                         theField.setCellAt(toEat.getRow(), toEat.getCol(),
                                  null);
 
                         // Feed ourself from the Fox we just ate.
                         eats();
-
-                        // If the Neighboring Hound still exists, then
-                        // birth a new Hound where the Fox was.
-                        // Else we missed the Fox, so we just get hungrier.
-                        if (theField.isOccupied(toMate.getRow(),
-                                 toMate.getCol())
-                                 && theField
-                                          .getCellAt(toMate.getRow(),
-                                                   toMate.getCol())
-                                          .getOccupant() instanceof Hound)
-                        {
-                           // Set the Cell that we are going to eat with a new
-                           // Hound and start the thread.
-                           theField.setCellAt(toEat.getRow(),
-                                    toEat.getCol(),
-                                    new Hound(toEat.getRow(),
-                                             toEat.getCol(), theField,
-                                             getStartPhaser()))
-                                    .start();
-                        }
-                     } // Eat Fox
-                  } // Release lock on third Cell
-               } // Release lock on second Cell
-            } // Release lock on first Cell
-         } // Eat Fox, spawn Hound
-
-         // Else, we will just try to go eat a Fox.
-         else if (foxes.size() > 0)
-         {
-            // Get a random Fox to eat.
-            toEat = foxes.get(r.nextInt(foxes.size()));
-
-            // Prioritize our Cells.
-            toLock.add(theField.getCellAt(getRow(), getCol()));
-            toLock.add(theField.getCellAt(toEat.getRow(), toEat.getCol()));
-
-            // Get the next two Cells to lock.
-            first = toLock.poll();
-            second = toLock.poll();
-
-            // Lock the first Cell.
-            synchronized (first)
-            {
-               // Lock the second Cell.
-               synchronized (second)
-               {
-                  // If the location is still occupied, and the occupant
-                  // is a Fox, we'll eat that Fox.
-                  // Else we missed the Fox, so get hungrier.
-                  if (theField.isOccupied(toEat.getRow(), toEat.getCol())
-                           && theField
-                                    .getCellAt(toEat.getRow(),
-                                             toEat.getCol())
-                                    .getOccupant() instanceof Fox)
-                  {
-                     // Set the Fox's Cell to be null so it will exit before
-                     // trying to do anything.
-                     theField.setCellAt(toEat.getRow(), toEat.getCol(),
-                              null);
-
-                     // Feed ourself from the Fox we just ate.
-                     eats();
-                  }
-               } // Release lock on second Cell
-            } // Release lock on first Cell
-         } // Just eat a Fox
-           // Else If none of its neighbors is a Fox, it gets hungrier.
+                     }
+                  } // Release lock on second Cell
+               } // Release lock on first Cell
+            } // Just eat a Fox
+              // Else If none of its neighbors is a Fox, it starves more
+         } // Eat Fox, spawn Hound or just Eat a Fox
 
          // Reset our lists of Foxes and Hounds nearby.
          foxes.clear();

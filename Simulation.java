@@ -32,7 +32,7 @@ public class Simulation
       int starveTime = Hound.DEFAULT_STARVE_TIME; // Default starvation time
       double probabilityFox = 0.15; // Default probability of fox
       double probabilityHound = 0.05; // Default probability of hound
-      boolean graphicsMode = false;
+      boolean graphicsMode = true;
       Random randomGenerator = new Random();
       Field theField = null;
       Phaser startPhaser = new Phaser();
